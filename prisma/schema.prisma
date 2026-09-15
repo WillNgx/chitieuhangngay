@@ -1,0 +1,128 @@
+// Prisma Schema for Telegram Expense Tracker Bot
+// Shared wallet, multi-currency, PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String        @id @default(uuid())
+  telegramId       String        @unique @map("telegram_id")
+  displayName      String?       @map("display_name")
+  isAuthorized     Boolean       @default(false) @map("is_authorized")
+  timezone         String        @default("Asia/Bangkok")
+  defaultCurrency  String        @default("USD") @map("default_currency")
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  transactions     Transaction[]
+
+  @@map("users")
+}
+
+model Category {
+  id           String        @id @default(uuid())
+  parentId     String?       @map("parent_id")
+  name         String
+  type         String        @default("expense")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  parent       Category?     @relation("CategoryToSubcategory", fields: [parentId], references: [id], onDelete: Cascade)
+  subcategories Category[]   @relation("CategoryToSubcategory")
+  transactions Transaction[]
+
+  @@map("categories")
+}
+
+enum TransactionSource {
+  text
+  receipt
+  manual
+}
+
+enum TransactionStatus {
+  pending_confirm
+  confirmed
+  rejected
+}
+
+model Transaction {
+  id              String             @id @default(uuid())
+  userId          String             @map("user_id")
+  amount          Decimal            @db.Decimal(18, 4)
+  currency        String             @db.VarChar(10)
+  usdAmount       Decimal            @map("usd_amount") @db.Decimal(18, 4)
+  exchangeRate    Decimal            @map("exchange_rate") @db.Decimal(18, 6)
+  exchangeRateAt  DateTime           @map("exchange_rate_at")
+  categoryId      String?            @map("category_id")
+  merchant        String?
+  description     String?
+  purpose         String?
+  transactionAt   DateTime           @default(now()) @map("transaction_at")
+  source          TransactionSource  @default(text)
+  aiConfidence    Decimal?           @map("ai_confidence") @db.Decimal(5, 4)
+  status          TransactionStatus  @default(pending_confirm)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  user            User               @relation(fields: [userId], references: [id])
+  category        Category?          @relation(fields: [categoryId], references: [id])
+  receipts        Receipt[]
+  aiExtractions   AiExtraction[]
+
+  @@map("transactions")
+}
+
+model Receipt {
+  id              String       @id @default(uuid())
+  transactionId   String?      @map("transaction_id")
+  telegramFileId  String       @map("telegram_file_id")
+  storageKey      String?      @map("storage_key")
+  mimeType        String?      @map("mime_type")
+  fileSize        Int?         @map("file_size")
+  ocrData         Json?        @map("ocr_data")
+  expiresAt       DateTime     @map("expires_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  transaction     Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@map("receipts")
+}
+
+model ExchangeRate {
+  id              String       @id @default(uuid())
+  baseCurrency    String       @map("base_currency") @db.VarChar(10)
+  targetCurrency  String       @map("target_currency") @db.VarChar(10)
+  rate            Decimal      @db.Decimal(18, 6)
+  rateDate        DateTime     @map("rate_date")
+  provider        String       @default("frankfurter")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@unique([baseCurrency, targetCurrency, rateDate, provider])
+  @@map("exchange_rates")
+}
+
+model AiExtraction {
+  id              String       @id @default(uuid())
+  transactionId   String?      @map("transaction_id")
+  model           String
+  rawInput        String       @map("raw_input")
+  extractedJson   Json         @map("extracted_json")
+  confidence      Decimal?     @db.Decimal(5, 4)
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  transaction     Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@map("ai_extractions")
+}
+
+model TelegramUpdate {
+  updateId    BigInt   @id @map("update_id")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("telegram_updates")
+}
