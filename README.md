@@ -42,7 +42,7 @@ Bot Telegram ghi nhận và quản lý chi tiêu gia đình dùng chung một v�
 - **API Framework**: Fastify 5
 - **Bot Framework**: grammY
 - **Database & ORM**: PostgreSQL (Supabase) + Prisma ORM (`Decimal` type)
-- **AI Gateway**: Google GenAI SDK (`@google/genai`) + Gemini 2.0 Flash
+- **AI Gateway**: Google GenAI SDK (`@google/genai`) + Gemini 3.6 Flash
 - **Image Processing**: Sharp
 - **Exchange Rates**: Frankfurter API + Open ER API
 - **Testing**: Vitest

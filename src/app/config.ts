@@ -18,7 +18,7 @@ const configSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
-  GEMINI_MODEL: z.string().default('gemini-2.0-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
 
   EXCHANGE_RATE_API_URL: z.string().url().default('https://api.frankfurter.app'),
 
