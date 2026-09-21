@@ -32,17 +32,17 @@ async function main() {
     });
   }, AUTO_CONFIRM_SCAN_INTERVAL_MS);
 
-  // Tự ping mỗi 14 phút để Render free không cho server ngủ (chỉ bật trên production)
-  if (env.NODE_ENV === 'production') {
-    const keepAliveUrl = resolveKeepAliveUrl({
-      renderExternalUrl: env.RENDER_EXTERNAL_URL,
-      telegramWebhookUrl: env.TELEGRAM_WEBHOOK_URL,
-    });
-    if (keepAliveUrl) {
-      startKeepAlive(keepAliveUrl);
-    } else {
-      logger.warn('Không xác định được URL công khai -> không bật keep-alive');
-    }
+  // Tự ping mỗi 14 phút để Render free không cho server ngủ.
+  // Bật khi chạy trên Render (Render luôn tự cấp RENDER_EXTERNAL_URL, không phụ thuộc NODE_ENV),
+  // hoặc production có TELEGRAM_WEBHOOK_URL. Máy local không có 2 điều kiện này -> không ping.
+  const keepAliveUrl = resolveKeepAliveUrl({
+    renderExternalUrl: env.RENDER_EXTERNAL_URL,
+    telegramWebhookUrl: env.NODE_ENV === 'production' ? env.TELEGRAM_WEBHOOK_URL : undefined,
+  });
+  if (keepAliveUrl) {
+    startKeepAlive(keepAliveUrl);
+  } else {
+    logger.info('Không chạy trên Render/production -> không bật keep-alive');
   }
 }
 

@@ -166,4 +166,4 @@ curl http://localhost:3000/health
    ```
 
 > [!TIP]
-> **Tránh Render Sleep (Cold Start)**: Vì Render free tier sẽ tạm ngủ sau 15 phút không có request, server đã **tự ping `/health` mỗi 14 phút** (khi `NODE_ENV=production`, dùng `RENDER_EXTERNAL_URL` do Render tự cấp). Chạy liên tục tốn ~720–744 giờ/tháng trong 750 giờ free của Render, nên tránh chạy thêm service free khác trên cùng tài khoản.
+> **Tránh Render Sleep (Cold Start)**: Vì Render free tier sẽ tạm ngủ sau 15 phút không có request, server đã **tự ping `/health` mỗi 14 phút** (tự bật khi chạy trên Render, dùng `RENDER_EXTERNAL_URL` do Render tự cấp). Chạy liên tục tốn ~720–744 giờ/tháng trong 750 giờ free của Render, nên tránh chạy thêm service free khác trên cùng tài khoản.
