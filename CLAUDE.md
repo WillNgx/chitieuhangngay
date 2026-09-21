@@ -33,7 +33,7 @@ Bot Telegram giúp ghi nhận và theo dõi chi tiêu **gia đình** (nhiều ng
 | FR4 | Command trả tổng chi tiêu theo tuần / tháng / năm (USD) | [FACT] |
 | FR5 | AI tự động phân loại category + mục đích (purpose) chi tiêu | [FACT] |
 | FR6 | Tự động lấy tỷ giá, quy đổi ra USD **tại thời điểm gửi tin**, lưu snapshot | [FACT] |
-| FR7 | Xác nhận (Confirm/Edit/Huỷ) bắt buộc trước khi ghi nhận chính thức | [DECISION] |
+| FR7 | Preview (Confirm/Edit/Huỷ) bắt buộc trước khi ghi nhận chính thức; không bấm gì sau 5 phút → tự động xác nhận | [DECISION] |
 | FR8 | `/edit`, `/delete` để sửa/xoá giao dịch đã confirmed | [FACT] |
 | FR9 | Xác thực người dùng bằng password lần đầu chat với bot | [DECISION] |
 
@@ -226,7 +226,8 @@ Bot gửi PREVIEW kèm inline keyboard (BẮT BUỘC, mọi trường hợp):
 (Tin nhiều khoản → 1 preview liệt kê từng khoản + tổng USD,
  nút [✅ Xác nhận tất cả] [❌ Huỷ tất cả]; nhóm nhận diện bằng user_id + transaction_at)
         ↓
-User bấm nút
+User bấm nút (không bấm gì trong 5 phút kể từ lúc tạo/sửa → job tự động confirmed,
+              bot sửa tin preview thành "✅ ĐÃ TỰ ĐỘNG XÁC NHẬN" và gỡ nút)
    ├─ ✅ Xác nhận → status = confirmed, bot reply "✅ Expense recorded"
    ├─ ✏️ Sửa      → mở flow chỉnh sửa field (category/amount/...), rồi quay lại preview
    │               (sửa được giao dịch pending_confirm và confirmed, không sửa được rejected)
@@ -298,7 +299,7 @@ src/
 ## 11. Đã chốt (Decisions) — tất cả Open Questions đã được giải đáp
 
 - [DECISION] Multi-account, **shared wallet chung**, xác thực qua **password-gate** (mục 2).
-- [DECISION] **Luôn bắt buộc xác nhận** (Confirm/Edit/Huỷ) trước khi ghi `status = confirmed`.
+- [DECISION] **Luôn hiển thị preview** (Confirm/Edit/Huỷ) trước khi ghi `status = confirmed`. Nếu **không bấm gì sau 5 phút** (tính từ lúc tạo/sửa lần cuối) → job quét mỗi 30 giây **tự động xác nhận** (tin nhiều khoản được xác nhận cả nhóm).
 - [DECISION] Report tổng hợp (`/week`, `/month`, `/year`) **chỉ hiển thị USD**.
 - [DECISION] **Text xử lý ngay** (hỗ trợ nhiều khoản/tin, mỗi dòng 1 khoản). **Chỉ ảnh không caption mới chờ ghi chú**: nút ⚡ Xử lý ngay, tự xử lý sau **2 phút**, chốt sớm khi có tin text (mục 8). Thay cho quyết định cũ "buffer 3 phút cho mọi tin" vì làm mỗi tin text phải chờ 3 phút.
 - [DECISION] Tỷ giá luôn lấy **tại thời điểm nhận tin nhắn** — V1 không hỗ trợ backdate/parse ngày quá khứ.
@@ -315,6 +316,7 @@ src/
 Vì đây là bot dùng nội bộ gia đình, traffic thấp, ưu tiên **free + đơn giản** hơn là hiệu năng cao:
 
 - **Backend (Node.js/Fastify):** [RECOMMENDATION] **Render** — free web service, không cần thẻ, nhưng **sleep sau ~15 phút không có traffic** (lần gọi đầu sau khi ngủ có thể chậm vài chục giây). Với bot gia đình dùng không liên tục, chấp nhận được; nếu muốn tránh độ trễ này, có thể dùng dịch vụ ping định kỳ miễn phí (vd cron-job.org, UptimeRobot) gọi 1 endpoint health-check mỗi 10–14 phút để giữ service không ngủ.
+  - [DECISION] Server **tự ping `/health` mỗi 14 phút** qua URL công khai (`RENDER_EXTERNAL_URL` do Render tự cấp, fallback domain của `TELEGRAM_WEBHOOK_URL`), chỉ bật khi `NODE_ENV=production`. Lưu ý: chạy liên tục ~720–744 giờ/tháng, gần hết 750 giờ free/tháng của Render → không nên chạy thêm service free khác trên cùng tài khoản.
   - Phương án thay thế nếu cần always-on thật sự và chấp nhận cung cấp thẻ để xác minh: **Northflank** (free tier cho 2 service, không sleep).
   - Railway hiện **không còn free tier vĩnh viễn** (chỉ có $5 credit dùng thử rồi tính phí) nên không đề xuất cho V1.
 - **Database + Storage ảnh hoá đơn:** [RECOMMENDATION] **Supabase** free tier — vừa có Postgres free vĩnh viễn (không thẻ), vừa có Storage free trong cùng 1 project, giúp gộp 2 nhu cầu (DB + lưu ảnh hoá đơn) vào 1 dịch vụ duy nhất thay vì tách riêng Cloudflare R2, đơn giản hoá hạ tầng cho 1 dự án gia đình. Lưu ý: Supabase **tạm dừng (pause) project nếu không có hoạt động trong 1 tuần**, cold-start lại mất 1–2 giây khi có truy vấn đầu tiên — chấp nhận được cho use-case này.

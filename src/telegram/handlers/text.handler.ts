@@ -6,6 +6,8 @@ import { messageBufferManager } from '../message-buffer.js';
 import { processExpenseText, processReceiptBuffer } from '../expense-processor.js';
 import { createTransactionPreviewKeyboard } from '../keyboards/transaction.keyboard.js';
 import { formatTransactionPreview } from '../utils/preview-formatter.js';
+import { previewRegistry } from '../preview-registry.js';
+import { AUTO_CONFIRM_HINT } from '../auto-confirm.job.js';
 import { waitingForEditState } from './callback.handler.js';
 
 import { CreateTransactionInput } from '../../modules/transaction/transaction.types.js';
@@ -51,12 +53,17 @@ textComposer.on('message:text', async (ctx) => {
         updates,
       );
       // Chỉ giao dịch còn chờ xác nhận mới hiện lại nút [Xác nhận/Sửa/Huỷ]
-      await ctx.reply(`✏️ Đã cập nhật thành công!\n\n${formatTransactionPreview(updatedTx)}`, {
-        reply_markup:
-          updatedTx.status === 'pending_confirm'
-            ? createTransactionPreviewKeyboard(updatedTx.id)
-            : undefined,
-      });
+      // (sửa xong thì đồng hồ tự xác nhận 5 phút tính lại từ đầu)
+      const isPending = updatedTx.status === 'pending_confirm';
+      const reply = await ctx.reply(
+        `✏️ Đã cập nhật thành công!\n\n${formatTransactionPreview(updatedTx)}${isPending ? `\n\n${AUTO_CONFIRM_HINT}` : ''}`,
+        {
+          reply_markup: isPending ? createTransactionPreviewKeyboard(updatedTx.id) : undefined,
+        },
+      );
+      if (isPending) {
+        previewRegistry.register([updatedTx.id], { chatId, messageId: reply.message_id });
+      }
     } catch (err) {
       logger.error({ err }, 'Lỗi khi cập nhật giao dịch');
       await ctx.reply('⚠️ Không thể cập nhật giao dịch. Vui lòng thử lại.');

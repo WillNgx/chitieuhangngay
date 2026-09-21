@@ -1,5 +1,8 @@
 import { startServer } from './app/server.js';
+import { env } from './app/config.js';
+import { resolveKeepAliveUrl, startKeepAlive } from './app/keep-alive.js';
 import { runReceiptCleanup } from './modules/receipt/receipt-cleanup.job.js';
+import { runAutoConfirm } from './telegram/auto-confirm.job.js';
 import { logger } from './shared/logger/index.js';
 
 async function main() {
@@ -20,6 +23,27 @@ async function main() {
       logger.warn({ err }, 'Lỗi khi chạy scheduled cleanup job');
     });
   }, CLEANUP_INTERVAL_MS);
+
+  // Quét mỗi 30 giây: giao dịch chờ xác nhận quá 5 phút -> tự động xác nhận
+  const AUTO_CONFIRM_SCAN_INTERVAL_MS = 30 * 1000;
+  setInterval(() => {
+    runAutoConfirm().catch((err) => {
+      logger.warn({ err }, 'Lỗi khi chạy job tự động xác nhận');
+    });
+  }, AUTO_CONFIRM_SCAN_INTERVAL_MS);
+
+  // Tự ping mỗi 14 phút để Render free không cho server ngủ (chỉ bật trên production)
+  if (env.NODE_ENV === 'production') {
+    const keepAliveUrl = resolveKeepAliveUrl({
+      renderExternalUrl: env.RENDER_EXTERNAL_URL,
+      telegramWebhookUrl: env.TELEGRAM_WEBHOOK_URL,
+    });
+    if (keepAliveUrl) {
+      startKeepAlive(keepAliveUrl);
+    } else {
+      logger.warn('Không xác định được URL công khai -> không bật keep-alive');
+    }
+  }
 }
 
 main().catch((err) => {

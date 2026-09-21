@@ -12,6 +12,8 @@ const configSchema = z.object({
 
   TELEGRAM_BOT_TOKEN: z.string().min(1, 'TELEGRAM_BOT_TOKEN is required'),
   TELEGRAM_WEBHOOK_URL: z.string().optional(),
+  // Render tự cấp biến này (URL công khai của service), dùng cho keep-alive
+  RENDER_EXTERNAL_URL: z.string().url().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().min(1, 'TELEGRAM_WEBHOOK_SECRET is required'),
 
   BOT_ACCESS_PASSWORD: z.string().min(1, 'BOT_ACCESS_PASSWORD is required').default('mw1624'),

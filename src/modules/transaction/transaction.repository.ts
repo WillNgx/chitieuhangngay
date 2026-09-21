@@ -62,6 +62,14 @@ export class TransactionRepository {
     });
   }
 
+  // Giao dịch chờ xác nhận không được đụng tới (tạo/sửa) kể từ mốc cutoff
+  async findPendingUpdatedBefore(cutoff: Date) {
+    return prisma.transaction.findMany({
+      where: { status: 'pending_confirm', updatedAt: { lte: cutoff } },
+      select: { userId: true, transactionAt: true },
+    });
+  }
+
   async updateStatusMany(ids: string[], status: TransactionStatus) {
     return prisma.transaction.updateMany({
       where: { id: { in: ids }, status: 'pending_confirm' },

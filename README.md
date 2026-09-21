@@ -19,6 +19,7 @@ Bot Telegram ghi nhận và quản lý chi tiêu gia đình dùng chung một v�
    - Ảnh có chú thích → xử lý ngay.
    - Ảnh không chú thích → bot hiện nút [⚡ Xử lý ngay]; gửi tin text trong 2 phút sẽ thành ghi chú của ảnh và xử lý ngay; không làm gì thì tự xử lý sau 2 phút.
 4. **Bắt buộc Xem trước & Xác nhận (Inline Keyboard)**:
+   - Không bấm gì sau 5 phút → bot tự động xác nhận và cập nhật lại tin xem trước.
    - Mọi giao dịch đều hiển thị Preview:
      ```text
      🍜 ABC Restaurant · 💰 850 THB · 💵 ≈ $26.30
@@ -165,4 +166,4 @@ curl http://localhost:3000/health
    ```
 
 > [!TIP]
-> **Tránh Render Sleep (Cold Start)**: Vì Render free tier sẽ tạm ngủ sau 15 phút không có request, bạn có thể tạo một monitor miễn phí trên [cron-job.org](https://cron-job.org) hoặc [UptimeRobot](https://uptimerobot.com) để ping endpoint `https://[YOUR-APP].onrender.com/health` mỗi 10 phút một lần nhằm duy trì bot luôn sẵn sàng.
+> **Tránh Render Sleep (Cold Start)**: Vì Render free tier sẽ tạm ngủ sau 15 phút không có request, server đã **tự ping `/health` mỗi 14 phút** (khi `NODE_ENV=production`, dùng `RENDER_EXTERNAL_URL` do Render tự cấp). Chạy liên tục tốn ~720–744 giờ/tháng trong 750 giờ free của Render, nên tránh chạy thêm service free khác trên cùng tài khoản.

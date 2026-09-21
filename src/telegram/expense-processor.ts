@@ -13,6 +13,8 @@ import {
   createTransactionPreviewKeyboard,
 } from './keyboards/transaction.keyboard.js';
 import { formatBatchPreview, formatTransactionPreview } from './utils/preview-formatter.js';
+import { previewRegistry } from './preview-registry.js';
+import { AUTO_CONFIRM_HINT } from './auto-confirm.job.js';
 import { bot } from './bot.js';
 
 // Giới hạn số khoản trong 1 tin nhắn để tránh tốn quota AI và tin xem trước quá dài
@@ -140,15 +142,22 @@ export async function processExpenseText(
       parsed.expenses.length - items.length,
     );
 
-    if (created.length === 1) {
-      await bot.api.sendMessage(chatId, `${formatTransactionPreview(created[0])}${notes}`, {
-        reply_markup: createTransactionPreviewKeyboard(created[0].id),
-      });
-    } else {
-      await bot.api.sendMessage(chatId, `${formatBatchPreview(created)}${notes}`, {
-        reply_markup: createBatchPreviewKeyboard(created[0].id),
-      });
-    }
+    const preview =
+      created.length === 1
+        ? await bot.api.sendMessage(
+            chatId,
+            `${formatTransactionPreview(created[0])}${notes}\n\n${AUTO_CONFIRM_HINT}`,
+            { reply_markup: createTransactionPreviewKeyboard(created[0].id) },
+          )
+        : await bot.api.sendMessage(
+            chatId,
+            `${formatBatchPreview(created)}${notes}\n\n${AUTO_CONFIRM_HINT}`,
+            { reply_markup: createBatchPreviewKeyboard(created[0].id) },
+          );
+    previewRegistry.register(
+      created.map((tx) => tx.id),
+      { chatId, messageId: preview.message_id },
+    );
   } catch (error) {
     await discardPendingTransactions(created);
     await replyProcessingError(chatId, error, { text });
@@ -197,9 +206,12 @@ export async function processReceiptBuffer(buffer: ChatBuffer): Promise<void> {
       ocrData: parsed.rawOcrText ? { text: parsed.rawOcrText } : undefined,
     });
 
-    await bot.api.sendMessage(chatId, formatTransactionPreview(tx), {
-      reply_markup: createTransactionPreviewKeyboard(tx.id),
-    });
+    const preview = await bot.api.sendMessage(
+      chatId,
+      `${formatTransactionPreview(tx)}\n\n${AUTO_CONFIRM_HINT}`,
+      { reply_markup: createTransactionPreviewKeyboard(tx.id) },
+    );
+    previewRegistry.register([tx.id], { chatId, messageId: preview.message_id });
   } catch (error) {
     await discardPendingTransactions(created);
     await replyProcessingError(chatId, error, { note, source: 'receipt' });

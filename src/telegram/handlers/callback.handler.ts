@@ -8,6 +8,7 @@ import {
 import { formatBatchPreview, formatTransactionPreview } from '../utils/preview-formatter.js';
 import { messageBufferManager } from '../message-buffer.js';
 import { processReceiptBuffer } from '../expense-processor.js';
+import { previewRegistry } from '../preview-registry.js';
 
 export const callbackComposer = new Composer();
 
@@ -40,6 +41,7 @@ callbackComposer.on('callback_query:data', async (ctx) => {
     // Tin nhắn nhiều khoản: xác nhận / huỷ cả nhóm
     if (data.startsWith('batch_confirm:')) {
       const txs = await transactionService.confirmBatch(data.replace('batch_confirm:', ''));
+      previewRegistry.forget(txs.map((tx) => tx.id));
 
       await ctx.answerCallbackQuery({ text: `✅ Đã ghi nhận ${txs.length} khoản chi!` });
       await ctx.editMessageText(
@@ -50,6 +52,7 @@ callbackComposer.on('callback_query:data', async (ctx) => {
 
     if (data.startsWith('batch_cancel:')) {
       const txs = await transactionService.rejectBatch(data.replace('batch_cancel:', ''));
+      previewRegistry.forget(txs.map((tx) => tx.id));
 
       await ctx.answerCallbackQuery({ text: `❌ Đã huỷ ${txs.length} khoản chi!` });
       await ctx.editMessageText(`❌ ĐÃ HUỶ ${txs.length} KHOẢN CHI\n\n${formatBatchPreview(txs)}`);
@@ -60,6 +63,7 @@ callbackComposer.on('callback_query:data', async (ctx) => {
     if (data.startsWith('tx_confirm:')) {
       const transactionId = data.replace('tx_confirm:', '');
       const tx = await transactionService.confirmTransaction(transactionId);
+      previewRegistry.forget([transactionId]);
 
       await ctx.answerCallbackQuery({ text: '✅ Đã ghi nhận chi tiêu!' });
       await ctx.editMessageText(
@@ -75,6 +79,7 @@ callbackComposer.on('callback_query:data', async (ctx) => {
     if (data.startsWith('tx_cancel:')) {
       const transactionId = data.replace('tx_cancel:', '');
       const tx = await transactionService.rejectTransaction(transactionId);
+      previewRegistry.forget([transactionId]);
 
       await ctx.answerCallbackQuery({ text: '❌ Đã huỷ giao dịch!' });
       await ctx.editMessageText(`❌ ~~GIAO DỊCH ĐÃ BỊ HUỶ~~\n\n${formatTransactionPreview(tx)}`, {

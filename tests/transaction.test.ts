@@ -13,6 +13,7 @@ vi.mock('../src/modules/transaction/transaction.repository.js', () => ({
     delete: vi.fn(),
     findOrCreateCategory: vi.fn(),
     findPendingBatch: vi.fn(),
+    findPendingUpdatedBefore: vi.fn(),
     updateStatusMany: vi.fn(),
   },
 }));
@@ -162,6 +163,41 @@ describe('TransactionService & Decimal Currency (Phase 4)', () => {
       'confirmed',
     );
     expect(batch).toHaveLength(3);
+  });
+
+  it('tự động xác nhận giao dịch quá 5 phút, gom theo nhóm để tin nhiều khoản xác nhận cùng lúc', async () => {
+    const batchAt = new Date('2026-09-21T06:00:00Z');
+    const singleAt = new Date('2026-09-21T06:01:00Z');
+    (transactionRepository.findPendingUpdatedBefore as any).mockResolvedValue([
+      { userId: 'user-1', transactionAt: batchAt },
+      { userId: 'user-1', transactionAt: batchAt },
+      { userId: 'user-2', transactionAt: singleAt },
+    ]);
+    (transactionRepository.findPendingBatch as any).mockImplementation(
+      async (_userId: string, at: Date) =>
+        at === batchAt ? [{ id: 'tx-1' }, { id: 'tx-2' }] : [{ id: 'tx-3' }],
+    );
+    (transactionRepository.updateStatusMany as any).mockResolvedValue({ count: 1 });
+
+    const groups = await transactionService.autoConfirmExpired(new Date());
+
+    expect(transactionRepository.findPendingBatch).toHaveBeenCalledTimes(2);
+    expect(transactionRepository.updateStatusMany).toHaveBeenCalledWith(
+      ['tx-1', 'tx-2'],
+      'confirmed',
+    );
+    expect(transactionRepository.updateStatusMany).toHaveBeenCalledWith(['tx-3'], 'confirmed');
+    expect(groups).toHaveLength(2);
+  });
+
+  it('bỏ qua nhóm vừa được người dùng tự xác nhận/huỷ cùng lúc (count = 0)', async () => {
+    (transactionRepository.findPendingUpdatedBefore as any).mockResolvedValue([
+      { userId: 'user-1', transactionAt: new Date() },
+    ]);
+    (transactionRepository.findPendingBatch as any).mockResolvedValue([{ id: 'tx-1' }]);
+    (transactionRepository.updateStatusMany as any).mockResolvedValue({ count: 0 });
+
+    await expect(transactionService.autoConfirmExpired(new Date())).resolves.toHaveLength(0);
   });
 
   it('báo lỗi khi bấm lại nút của nhóm đã được xử lý', async () => {

@@ -121,6 +121,43 @@ export class TransactionService {
   }
 
   /**
+   * Tự động xác nhận giao dịch chờ xác nhận quá hạn (không ai bấm nút kể từ mốc cutoff).
+   * Mở rộng theo nhóm (cùng người tạo + thời điểm nhận tin) để các khoản của 1 tin nhắn
+   * luôn được xác nhận cùng lúc. Trả về danh sách nhóm đã xác nhận.
+   */
+  async autoConfirmExpired(cutoff: Date) {
+    const expired = await transactionRepository.findPendingUpdatedBefore(cutoff);
+
+    const groups = new Map<string, { userId: string; transactionAt: Date }>();
+    for (const tx of expired) {
+      groups.set(`${tx.userId}:${tx.transactionAt.getTime()}`, tx);
+    }
+
+    const confirmedGroups = [];
+    for (const { userId, transactionAt } of groups.values()) {
+      const batch = await transactionRepository.findPendingBatch(userId, transactionAt);
+      if (batch.length === 0) continue;
+
+      const { count } = await transactionRepository.updateStatusMany(
+        batch.map((tx) => tx.id),
+        'confirmed',
+      );
+      // count = 0: người dùng vừa bấm xác nhận/huỷ cùng lúc -> bỏ qua
+      if (count > 0) {
+        confirmedGroups.push(batch);
+      }
+    }
+
+    if (confirmedGroups.length > 0) {
+      logger.info(
+        { groups: confirmedGroups.length, cutoff: cutoff.toISOString() },
+        'Đã tự động xác nhận giao dịch quá hạn',
+      );
+    }
+    return confirmedGroups;
+  }
+
+  /**
    * Sửa giao dịch đã có (đang chờ xác nhận hoặc đã xác nhận)
    */
   async updateTransaction(id: string, updates: Partial<CreateTransactionInput>) {
