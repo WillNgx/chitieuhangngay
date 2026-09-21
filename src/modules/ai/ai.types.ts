@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const ExpenseParserOutputSchema = z.object({
+// 1 khoản chi trong tin nhắn text (1 tin có thể có nhiều khoản, mỗi dòng 1 khoản)
+export const ExpenseItemSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d+)?$/, 'Amount phải là chuỗi số hợp lệ'),
   currency: z.string().min(2).max(10).toUpperCase(),
   merchant: z.string().nullable().optional(),
@@ -11,7 +12,22 @@ export const ExpenseParserOutputSchema = z.object({
   description: z.string().min(1),
 });
 
-export type ExpenseParserOutput = z.infer<typeof ExpenseParserOutputSchema>;
+export type ExpenseItem = z.infer<typeof ExpenseItemSchema>;
+
+// Khung output thô của ExpenseParser: từng khoản được validate riêng bằng ExpenseItemSchema
+// để 1 khoản sai không làm hỏng cả tin nhắn
+export const ExpenseParserRawOutputSchema = z.object({
+  expenses: z.array(z.unknown()),
+  ignored: z.array(z.string()).nullable().optional(),
+});
+
+export interface ExpenseParserOutput {
+  expenses: ExpenseItem[];
+  // Các dòng AI không nhận ra là khoản chi
+  ignored: string[];
+  // Số khoản AI trả về nhưng sai schema (bị loại)
+  invalidCount: number;
+}
 
 export const ReceiptExtractorOutputSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d+)?$/, 'Amount phải là chuỗi số hợp lệ'),

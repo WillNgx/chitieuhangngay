@@ -46,6 +46,29 @@ export class TransactionRepository {
     });
   }
 
+  // Các giao dịch của cùng 1 tin nhắn nhiều khoản: cùng người tạo + cùng thời điểm nhận tin
+  async findPendingBatch(userId: string, transactionAt: Date) {
+    return prisma.transaction.findMany({
+      where: { userId, transactionAt, status: 'pending_confirm' },
+      include: {
+        category: {
+          include: {
+            parent: true,
+          },
+        },
+        user: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async updateStatusMany(ids: string[], status: TransactionStatus) {
+    return prisma.transaction.updateMany({
+      where: { id: { in: ids }, status: 'pending_confirm' },
+      data: { status },
+    });
+  }
+
   async update(id: string, data: Prisma.TransactionUpdateInput) {
     return prisma.transaction.update({
       where: { id },

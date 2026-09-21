@@ -12,6 +12,8 @@ vi.mock('../src/modules/transaction/transaction.repository.js', () => ({
     update: vi.fn(),
     delete: vi.fn(),
     findOrCreateCategory: vi.fn(),
+    findPendingBatch: vi.fn(),
+    updateStatusMany: vi.fn(),
   },
 }));
 
@@ -114,15 +116,64 @@ describe('TransactionService & Decimal Currency (Phase 4)', () => {
     expect(transactionRepository.updateStatus).not.toHaveBeenCalled();
   });
 
-  it('chỉ cho sửa và xoá giao dịch đã confirmed', async () => {
+  it('cho sửa giao dịch đang chờ xác nhận (nút ✏️ Sửa trên bản xem trước), nhưng chỉ xoá giao dịch đã confirmed', async () => {
     (transactionRepository.findById as any).mockResolvedValue({
       id: 'tx-123',
       status: 'pending_confirm',
+      categoryId: null,
+    });
+    (transactionRepository.update as any).mockResolvedValue({ id: 'tx-123', merchant: 'ABC' });
+
+    await expect(
+      transactionService.updateTransaction('tx-123', { merchant: 'ABC' }),
+    ).resolves.toMatchObject({ merchant: 'ABC' });
+    await expect(transactionService.deleteTransaction('tx-123')).rejects.toThrow('đã xác nhận');
+  });
+
+  it('không cho sửa giao dịch đã bị huỷ', async () => {
+    (transactionRepository.findById as any).mockResolvedValue({
+      id: 'tx-123',
+      status: 'rejected',
     });
 
-    await expect(transactionService.updateTransaction('tx-123', {})).rejects.toThrow(
-      'đã xác nhận',
+    await expect(transactionService.updateTransaction('tx-123', {})).rejects.toThrow('đã bị huỷ');
+    expect(transactionRepository.update).not.toHaveBeenCalled();
+  });
+
+  it('xác nhận cả nhóm giao dịch của tin nhắn nhiều khoản', async () => {
+    const transactionAt = new Date('2026-09-21T06:00:00Z');
+    (transactionRepository.findById as any).mockResolvedValue({
+      id: 'tx-1',
+      userId: 'user-1',
+      transactionAt,
+      status: 'pending_confirm',
+    });
+    (transactionRepository.findPendingBatch as any).mockResolvedValue([
+      { id: 'tx-1' },
+      { id: 'tx-2' },
+      { id: 'tx-3' },
+    ]);
+
+    const batch = await transactionService.confirmBatch('tx-1');
+
+    expect(transactionRepository.findPendingBatch).toHaveBeenCalledWith('user-1', transactionAt);
+    expect(transactionRepository.updateStatusMany).toHaveBeenCalledWith(
+      ['tx-1', 'tx-2', 'tx-3'],
+      'confirmed',
     );
-    await expect(transactionService.deleteTransaction('tx-123')).rejects.toThrow('đã xác nhận');
+    expect(batch).toHaveLength(3);
+  });
+
+  it('báo lỗi khi bấm lại nút của nhóm đã được xử lý', async () => {
+    (transactionRepository.findById as any).mockResolvedValue({
+      id: 'tx-1',
+      userId: 'user-1',
+      transactionAt: new Date(),
+      status: 'confirmed',
+    });
+    (transactionRepository.findPendingBatch as any).mockResolvedValue([]);
+
+    await expect(transactionService.rejectBatch('tx-1')).rejects.toThrow('đã được xử lý');
+    expect(transactionRepository.updateStatusMany).not.toHaveBeenCalled();
   });
 });

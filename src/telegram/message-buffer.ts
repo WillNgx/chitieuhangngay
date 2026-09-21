@@ -1,111 +1,110 @@
+import { randomUUID } from 'node:crypto';
 import { logger } from '../shared/logger/index.js';
 
 export interface BufferedPhoto {
   fileId: string;
   caption?: string;
+  mediaGroupId?: string;
 }
 
 export interface ChatBuffer {
+  // Mã lượt gom, dùng cho nút "⚡ Xử lý ngay"
+  id: string;
   chatId: number;
   userId: string;
   texts: string[];
   photos: BufferedPhoto[];
+  mediaGroupId?: string;
   timer: NodeJS.Timeout | null;
   startedAt: Date;
 }
 
 export type FlushHandler = (buffer: ChatBuffer) => Promise<void>;
 
+/**
+ * Gom ảnh hoá đơn theo chat để chờ ghi chú đi kèm.
+ * Tin text không còn đi qua buffer (được xử lý ngay), chỉ ảnh mới phải chờ:
+ * chốt khi có ghi chú (tin text), khi bấm "⚡ Xử lý ngay", hoặc tự chốt sau 2 phút.
+ */
 export class MessageBufferManager {
   private buffers = new Map<number, ChatBuffer>();
-  private readonly BUFFER_WINDOW_MS = 3 * 60 * 1000; // 3 phút
+  // Album (media group) cuối cùng đã chốt của mỗi chat -> các ảnh đến trễ của album đó bị bỏ qua
+  private flushedMediaGroups = new Map<number, string>();
+  private readonly BUFFER_WINDOW_MS = 2 * 60 * 1000; // 2 phút
 
   /**
-   * Thêm tin nhắn text vào buffer
+   * Thêm ảnh vào buffer. Trả về null nếu ảnh thuộc album đã được xử lý.
    */
-  async addText(
-    chatId: number,
-    userId: string,
-    text: string,
-    onFlush: FlushHandler,
-  ): Promise<void> {
-    const existing = this.buffers.get(chatId);
-
-    // Nếu đã có buffer và buffer đó đã có text -> coi như bắt đầu giao dịch mới
-    // Chốt giao dịch cũ ngay lập tức
-    if (existing && existing.texts.length > 0) {
-      logger.info(
-        { chatId },
-        'Phát hiện tin nhắn text mới trong khi buffer cũ còn tồn tại -> Chốt giao dịch cũ',
-      );
-      // Không await: xử lý AI chạy nền để webhook trả về ngay, tránh vượt timeout 10s của grammY
-      // (Telegram sẽ gửi lại update và chặn các tin sau của cùng chat). flush() tự bắt lỗi của onFlush,
-      // và xoá buffer cũ khỏi map một cách đồng bộ trước lần await đầu tiên.
-      void this.flush(chatId, onFlush);
-    }
-
-    // Lấy lại buffer (nếu vừa flush thì map đã bị xoá)
-    let buffer = this.buffers.get(chatId);
-
-    if (!buffer) {
-      buffer = {
-        chatId,
-        userId,
-        texts: [text],
-        photos: [],
-        timer: null,
-        startedAt: new Date(),
-      };
-      this.buffers.set(chatId, buffer);
-
-      // Đặt hẹn giờ 3 phút
-      buffer.timer = setTimeout(async () => {
-        logger.info({ chatId }, 'Hết thời gian buffer 3 phút -> Chốt giao dịch');
-        await this.flush(chatId, onFlush);
-      }, this.BUFFER_WINDOW_MS);
-    } else {
-      // Buffer trước đó chỉ có ảnh, chưa có text -> gộp text vào
-      buffer.texts.push(text);
-    }
-  }
-
-  /**
-   * Thêm ảnh vào buffer
-   */
-  async addPhoto(
+  addPhoto(
     chatId: number,
     userId: string,
     photo: BufferedPhoto,
     onFlush: FlushHandler,
-  ): Promise<void> {
-    let buffer = this.buffers.get(chatId);
-
-    if (!buffer) {
-      buffer = {
-        chatId,
-        userId,
-        texts: photo.caption ? [photo.caption] : [],
-        photos: [photo],
-        timer: null,
-        startedAt: new Date(),
-      };
-      this.buffers.set(chatId, buffer);
-
-      buffer.timer = setTimeout(async () => {
-        logger.info({ chatId }, 'Hết thời gian buffer 3 phút -> Chốt giao dịch ảnh');
-        await this.flush(chatId, onFlush);
-      }, this.BUFFER_WINDOW_MS);
-    } else {
-      // Gộp ảnh vào buffer hiện có
-      buffer.photos.push(photo);
-      if (photo.caption) {
-        buffer.texts.push(photo.caption);
-      }
+  ): { buffer: ChatBuffer; isNew: boolean } | null {
+    if (photo.mediaGroupId && this.flushedMediaGroups.get(chatId) === photo.mediaGroupId) {
+      return null;
     }
+
+    const existing = this.buffers.get(chatId);
+    if (existing) {
+      // Gộp ảnh vào buffer hiện có (vd: các ảnh trong cùng 1 album)
+      existing.photos.push(photo);
+      if (photo.caption) {
+        existing.texts.push(photo.caption);
+      }
+      return { buffer: existing, isNew: false };
+    }
+
+    const buffer: ChatBuffer = {
+      id: randomUUID(),
+      chatId,
+      userId,
+      texts: photo.caption ? [photo.caption] : [],
+      photos: [photo],
+      mediaGroupId: photo.mediaGroupId,
+      timer: null,
+      startedAt: new Date(),
+    };
+    this.buffers.set(chatId, buffer);
+
+    buffer.timer = setTimeout(() => {
+      logger.info({ chatId }, 'Hết thời gian chờ 2 phút -> Tự động xử lý ảnh hoá đơn');
+      void this.flush(chatId, onFlush);
+    }, this.BUFFER_WINDOW_MS);
+
+    return { buffer, isNew: true };
   }
 
   /**
-   * Chốt buffer ngay lập tức và gọi handler xử lý
+   * Nếu chat đang có ảnh chờ -> tin text này là ghi chú của ảnh, chốt xử lý ngay.
+   * Trả về false nếu không có ảnh nào đang chờ.
+   */
+  attachNoteAndFlush(chatId: number, text: string, onFlush: FlushHandler): boolean {
+    const buffer = this.buffers.get(chatId);
+    if (!buffer) {
+      return false;
+    }
+    buffer.texts.push(text);
+    void this.flush(chatId, onFlush);
+    return true;
+  }
+
+  /**
+   * Chốt buffer theo mã lượt gom (nút "⚡ Xử lý ngay").
+   * Trả về false nếu lượt gom đó đã được xử lý trước đó.
+   */
+  flushById(chatId: number, bufferId: string, onFlush: FlushHandler): boolean {
+    if (this.buffers.get(chatId)?.id !== bufferId) {
+      return false;
+    }
+    void this.flush(chatId, onFlush);
+    return true;
+  }
+
+  /**
+   * Chốt buffer ngay lập tức và gọi handler xử lý.
+   * Phần xoá buffer chạy đồng bộ trước lần await đầu tiên, nên có thể gọi dạng `void flush()`
+   * (chạy nền) mà vẫn an toàn; lỗi của onFlush được bắt tại đây.
    */
   async flush(chatId: number, onFlush: FlushHandler): Promise<void> {
     const buffer = this.buffers.get(chatId);
@@ -119,6 +118,9 @@ export class MessageBufferManager {
     }
 
     this.buffers.delete(chatId);
+    if (buffer.mediaGroupId) {
+      this.flushedMediaGroups.set(chatId, buffer.mediaGroupId);
+    }
 
     try {
       await onFlush(buffer);

@@ -27,7 +27,7 @@ Bot Telegram giúp ghi nhận và theo dõi chi tiêu **gia đình** (nhiều ng
 
 | ID | Requirement | Nguồn |
 |---|---|---|
-| FR1 | Ghi nhận chi tiêu nhanh qua tin nhắn text (vd: "Ăn tối 250 THB") | [FACT] |
+| FR1 | Ghi nhận chi tiêu nhanh qua tin nhắn text (vd: "Ăn tối 250 THB"), 1 tin có thể gồm nhiều khoản (mỗi dòng 1 khoản) | [FACT] |
 | FR2 | Ghi nhận kèm ảnh hoá đơn, AI đọc ảnh (vision) để trích xuất dữ liệu | [FACT] |
 | FR3 | Hỗ trợ nhiều loại tiền tệ (không giới hạn 1 currency) | [FACT] |
 | FR4 | Command trả tổng chi tiêu theo tuần / tháng / năm (USD) | [FACT] |
@@ -197,12 +197,15 @@ Auth Middleware kiểm tra is_authorized (xem mục 2)
         ↓
 grammY Handler (text handler / photo handler riêng)
         ↓
-[DECISION] Gom nhóm message cùng 1 giao dịch:
-buffer theo chat_id trong 3 phút kể từ message đầu tiên (text hoặc photo).
-  - Nếu trong 3 phút nhận thêm photo (hoặc text) liên quan → gộp chung 1 giao dịch.
-  - Hết 3 phút KHÔNG nhận thêm gì, HOẶC user gửi 1 tin nhắn text mới (coi như
-    bắt đầu giao dịch khác) trước khi hết 3 phút → chốt giao dịch hiện tại
-    chỉ với dữ liệu đã có (vd: chỉ có text, không có ảnh).
+[DECISION] Text xử lý ngay, chỉ ảnh mới chờ ghi chú:
+  - Tin text (không có ảnh đang chờ) → xử lý NGAY (chạy nền, webhook trả về tức thì).
+    1 tin có thể gồm nhiều khoản (mỗi dòng 1 khoản) → chỉ gọi AI 1 lần cho cả tin,
+    tối đa 20 khoản/tin.
+  - Ảnh có caption → xử lý ngay (caption là ghi chú).
+  - Ảnh không caption → buffer theo chat_id, bot trả lời kèm nút [⚡ Xử lý ngay].
+    Chốt khi: user gửi tin text (thành ghi chú của ảnh), HOẶC bấm ⚡,
+    HOẶC hết 2 phút → tự xử lý chỉ với dữ liệu đã có.
+  - Album nhiều ảnh → 1 giao dịch (ảnh đầu), ảnh đến trễ của album đã xử lý bị bỏ qua.
         ↓
 AI Gateway → Gemini (text hoặc vision) → Structured JSON
         ↓
@@ -220,10 +223,13 @@ Bot gửi PREVIEW kèm inline keyboard (BẮT BUỘC, mọi trường hợp):
 🍜 ABC Restaurant · 💰 850 THB · 💵 ≈ $26.30
 📂 Food → Restaurant · 🎯 Social
 [✅ Xác nhận]  [✏️ Sửa]  [❌ Huỷ]
+(Tin nhiều khoản → 1 preview liệt kê từng khoản + tổng USD,
+ nút [✅ Xác nhận tất cả] [❌ Huỷ tất cả]; nhóm nhận diện bằng user_id + transaction_at)
         ↓
 User bấm nút
    ├─ ✅ Xác nhận → status = confirmed, bot reply "✅ Expense recorded"
    ├─ ✏️ Sửa      → mở flow chỉnh sửa field (category/amount/...), rồi quay lại preview
+   │               (sửa được giao dịch pending_confirm và confirmed, không sửa được rejected)
    └─ ❌ Huỷ       → status = rejected (hoặc xoá record pending)
 ```
 
@@ -294,7 +300,7 @@ src/
 - [DECISION] Multi-account, **shared wallet chung**, xác thực qua **password-gate** (mục 2).
 - [DECISION] **Luôn bắt buộc xác nhận** (Confirm/Edit/Huỷ) trước khi ghi `status = confirmed`.
 - [DECISION] Report tổng hợp (`/week`, `/month`, `/year`) **chỉ hiển thị USD**.
-- [DECISION] Gom nhóm message: **buffer 3 phút** theo `chat_id`, kết thúc sớm nếu có tin nhắn text mới (mục 8).
+- [DECISION] **Text xử lý ngay** (hỗ trợ nhiều khoản/tin, mỗi dòng 1 khoản). **Chỉ ảnh không caption mới chờ ghi chú**: nút ⚡ Xử lý ngay, tự xử lý sau **2 phút**, chốt sớm khi có tin text (mục 8). Thay cho quyết định cũ "buffer 3 phút cho mọi tin" vì làm mỗi tin text phải chờ 3 phút.
 - [DECISION] Tỷ giá luôn lấy **tại thời điểm nhận tin nhắn** — V1 không hỗ trợ backdate/parse ngày quá khứ.
 - [DECISION] **Không cần** tính năng ngân sách/hạn mức (budget) trong V1.
 - [DECISION] **Không cần** tính năng xuất dữ liệu (CSV/Excel) trong V1.

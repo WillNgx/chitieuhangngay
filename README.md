@@ -6,11 +6,18 @@ Bot Telegram ghi nhận và quản lý chi tiêu gia đình dùng chung một v�
 
 ## 🚀 Tính năng chính
 
-1. **Ghi nhận chi tiêu qua Text**: Nhập tự nhiên như "Ăn tối 250 THB", "Cà phê 45k", "Grab 120k". AI tự động trích xuất số tiền, loại tiền, danh mục, merchant, mục đích.
+1. **Ghi nhận chi tiêu qua Text (xử lý ngay)**: Nhập tự nhiên như "Ăn tối 250 THB", "Cà phê 45k", "Grab 120k". AI tự động trích xuất số tiền, loại tiền, danh mục, merchant, mục đích.
+   - Nhắn nhiều khoản trong 1 tin, mỗi dòng 1 khoản (tối đa 20):
+     ```text
+     mỳ thuyền 40 baht
+     mỳ gà 30 baht
+     nước 20 baht
+     ```
+     Bot trả 1 bản xem trước liệt kê từng khoản + tổng USD, kèm nút [✅ Xác nhận tất cả] [❌ Huỷ tất cả].
 2. **Ghi nhận qua Ảnh Hoá đơn (Vision OCR)**: Gửi ảnh hoá đơn (kèm hoặc không kèm text chú thích). AI đọc toàn bộ thông tin thanh toán.
-3. **Cơ chế Message Buffer (Gom nhóm 3 phút)**:
-   - Gộp ảnh và text gửi trong vòng 3 phút thành 1 giao dịch duy nhất.
-   - Nếu gửi 1 tin nhắn text mới trước khi hết 3 phút, hệ thống tự động chốt giao dịch cũ và bắt đầu giao dịch mới.
+3. **Ảnh hoá đơn chờ ghi chú (2 phút)**:
+   - Ảnh có chú thích → xử lý ngay.
+   - Ảnh không chú thích → bot hiện nút [⚡ Xử lý ngay]; gửi tin text trong 2 phút sẽ thành ghi chú của ảnh và xử lý ngay; không làm gì thì tự xử lý sau 2 phút.
 4. **Bắt buộc Xem trước & Xác nhận (Inline Keyboard)**:
    - Mọi giao dịch đều hiển thị Preview:
      ```text
@@ -65,7 +72,8 @@ src/
 │   └── receipt/               # StorageService, ReceiptService, auto-cleanup job (2 tháng)
 ├── telegram/
 │   ├── bot.ts                 # grammY instance & middlewares
-│   ├── message-buffer.ts      # Gom nhóm tin nhắn cửa sổ 3 phút
+│   ├── message-buffer.ts      # Gom ảnh hoá đơn chờ ghi chú (2 phút, nút ⚡ Xử lý ngay)
+│   ├── expense-processor.ts   # Gọi AI, tạo giao dịch pending, gửi bản xem trước
 │   ├── handlers/              # Command, Text, Photo, Callback handlers
 │   ├── keyboards/             # Inline keyboards
 │   └── utils/                 # Preview formatter, file downloader

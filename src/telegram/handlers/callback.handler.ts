@@ -5,7 +5,9 @@ import {
   createTransactionPreviewKeyboard,
   createEditFieldKeyboard,
 } from '../keyboards/transaction.keyboard.js';
-import { formatTransactionPreview } from '../utils/preview-formatter.js';
+import { formatBatchPreview, formatTransactionPreview } from '../utils/preview-formatter.js';
+import { messageBufferManager } from '../message-buffer.js';
+import { processReceiptBuffer } from '../expense-processor.js';
 
 export const callbackComposer = new Composer();
 
@@ -18,6 +20,42 @@ callbackComposer.on('callback_query:data', async (ctx) => {
   const userId = ctx.from.id.toString();
 
   try {
+    // Ảnh hoá đơn đang chờ ghi chú: xử lý ngay không cần đợi 2 phút
+    if (data.startsWith('buffer_flush:')) {
+      const bufferId = data.replace('buffer_flush:', '');
+      const flushed =
+        chatId !== undefined &&
+        messageBufferManager.flushById(chatId, bufferId, processReceiptBuffer);
+
+      await ctx.answerCallbackQuery({
+        text: flushed ? '⚡ Đang xử lý ảnh hoá đơn...' : 'Ảnh này đã được xử lý rồi',
+      });
+      // Gỡ nút để không bấm lại được
+      await ctx
+        .editMessageText(flushed ? '🧾 Đang xử lý ảnh hoá đơn...' : '🧾 Ảnh hoá đơn đã được xử lý.')
+        .catch(() => undefined);
+      return;
+    }
+
+    // Tin nhắn nhiều khoản: xác nhận / huỷ cả nhóm
+    if (data.startsWith('batch_confirm:')) {
+      const txs = await transactionService.confirmBatch(data.replace('batch_confirm:', ''));
+
+      await ctx.answerCallbackQuery({ text: `✅ Đã ghi nhận ${txs.length} khoản chi!` });
+      await ctx.editMessageText(
+        `✅ ĐÃ XÁC NHẬN ${txs.length} KHOẢN CHI\n\n${formatBatchPreview(txs)}`,
+      );
+      return;
+    }
+
+    if (data.startsWith('batch_cancel:')) {
+      const txs = await transactionService.rejectBatch(data.replace('batch_cancel:', ''));
+
+      await ctx.answerCallbackQuery({ text: `❌ Đã huỷ ${txs.length} khoản chi!` });
+      await ctx.editMessageText(`❌ ĐÃ HUỶ ${txs.length} KHOẢN CHI\n\n${formatBatchPreview(txs)}`);
+      return;
+    }
+
     // 1. Xác nhận giao dịch
     if (data.startsWith('tx_confirm:')) {
       const transactionId = data.replace('tx_confirm:', '');

@@ -90,15 +90,47 @@ export class TransactionService {
   }
 
   /**
-   * Sửa giao dịch đã có
+   * Xác nhận cả nhóm giao dịch của 1 tin nhắn nhiều khoản
+   */
+  async confirmBatch(anchorId: string) {
+    return this.setBatchStatus(anchorId, 'confirmed');
+  }
+
+  /**
+   * Huỷ cả nhóm giao dịch của 1 tin nhắn nhiều khoản
+   */
+  async rejectBatch(anchorId: string) {
+    return this.setBatchStatus(anchorId, 'rejected');
+  }
+
+  private async setBatchStatus(anchorId: string, status: 'confirmed' | 'rejected') {
+    const anchor = await transactionRepository.findById(anchorId);
+    if (!anchor) throw new Error(`Không tìm thấy giao dịch ID ${anchorId}`);
+
+    const batch = await transactionRepository.findPendingBatch(anchor.userId, anchor.transactionAt);
+    if (batch.length === 0) {
+      throw new Error('Nhóm giao dịch này đã được xử lý trước đó');
+    }
+
+    await transactionRepository.updateStatusMany(
+      batch.map((tx) => tx.id),
+      status,
+    );
+    logger.info({ anchorId, count: batch.length, status }, 'Đã cập nhật trạng thái nhóm giao dịch');
+    return batch;
+  }
+
+  /**
+   * Sửa giao dịch đã có (đang chờ xác nhận hoặc đã xác nhận)
    */
   async updateTransaction(id: string, updates: Partial<CreateTransactionInput>) {
     const existing = await transactionRepository.findById(id);
     if (!existing) {
       throw new Error(`Không tìm thấy giao dịch ID ${id}`);
     }
-    if (existing.status !== 'confirmed') {
-      throw new Error('Chỉ giao dịch đã xác nhận mới có thể được sửa');
+    // Cho sửa cả giao dịch pending_confirm để nút "✏️ Sửa" trên bản xem trước dùng được
+    if (existing.status === 'rejected') {
+      throw new Error('Không thể sửa giao dịch đã bị huỷ');
     }
 
     let usdAmount = existing.usdAmount;
