@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { ApiError } from '@google/genai';
 import {
   ExpenseParserOutputSchema,
   ReceiptExtractorOutputSchema,
   QueryInterpreterOutputSchema,
 } from '../src/modules/ai/ai.types.js';
+import { isRetryableGeminiError, parseJsonSafely } from '../src/modules/ai/gemini-helpers.js';
 
 describe('AI Zod Schemas (Phase 3)', () => {
   describe('ExpenseParserOutputSchema', () => {
@@ -79,5 +81,28 @@ describe('AI Zod Schemas (Phase 3)', () => {
       const result = QueryInterpreterOutputSchema.safeParse(validQuery);
       expect(result.success).toBe(true);
     });
+  });
+});
+
+describe('Gemini helpers (retry & parse JSON)', () => {
+  it('chỉ coi 429/503/504 và lỗi mạng là lỗi tạm thời đáng gọi lại', () => {
+    expect(isRetryableGeminiError(new ApiError({ message: 'quota', status: 429 }))).toBe(true);
+    expect(isRetryableGeminiError(new ApiError({ message: 'overloaded', status: 503 }))).toBe(true);
+    expect(isRetryableGeminiError(new ApiError({ message: 'deadline', status: 504 }))).toBe(true);
+    expect(isRetryableGeminiError(new TypeError('fetch failed'))).toBe(true);
+
+    expect(isRetryableGeminiError(new ApiError({ message: 'bad', status: 400 }))).toBe(false);
+    expect(isRetryableGeminiError(new ApiError({ message: 'not found', status: 404 }))).toBe(false);
+    expect(isRetryableGeminiError(new Error('Vui lòng nhập rõ hơn'))).toBe(false);
+  });
+
+  it('parseJsonSafely trả về null khi JSON hỏng thay vì ném lỗi', () => {
+    expect(parseJsonSafely('{"amount":"250"}')).toEqual({ amount: '250' });
+    expect(parseJsonSafely('không phải JSON')).toBeNull();
+  });
+
+  it('parseJsonSafely bóc mảng 1 phần tử, giữ nguyên mảng nhiều phần tử', () => {
+    expect(parseJsonSafely('[{"amount":"120000"}]')).toEqual({ amount: '120000' });
+    expect(parseJsonSafely('[{"a":1},{"a":2}]')).toEqual([{ a: 1 }, { a: 2 }]);
   });
 });

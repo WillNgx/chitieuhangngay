@@ -2,6 +2,12 @@ import { GoogleGenAI } from '@google/genai';
 import { env } from '../../app/config.js';
 import { logger } from '../../shared/logger/index.js';
 import { ExpenseParserOutput, ExpenseParserOutputSchema } from './ai.types.js';
+import {
+  GEMINI_RETRY_DELAY_MS,
+  delay,
+  isRetryableGeminiError,
+  parseJsonSafely,
+} from './gemini-helpers.js';
 
 const SYSTEM_PROMPT = `
 Bạn là AI chuyên gia phân tích chi tiêu gia đình. Nhiệm vụ của bạn là nhận tin nhắn mô tả chi tiêu của người dùng và trích xuất thành định dạng JSON chuẩn xác.
@@ -51,14 +57,14 @@ export class ExpenseParser {
         config: {
           responseMimeType: 'application/json',
           temperature: 0.1,
+          thinkingConfig: { thinkingLevel: env.GEMINI_THINKING_LEVEL },
         },
       });
 
       const responseText = response.text?.trim() || '{}';
-      const parsedJson = JSON.parse(responseText);
 
       // Validate bằng Zod Schema
-      const validationResult = ExpenseParserOutputSchema.safeParse(parsedJson);
+      const validationResult = ExpenseParserOutputSchema.safeParse(parseJsonSafely(responseText));
 
       if (!validationResult.success) {
         logger.warn(
@@ -78,11 +84,10 @@ export class ExpenseParser {
 
       return validationResult.data;
     } catch (error) {
-      if (
-        retryCount < 1 &&
-        !(error instanceof Error && error.message.includes('Vui lòng nhập rõ hơn'))
-      ) {
-        logger.warn({ error, retryCount }, 'Lỗi khi gọi Gemini, thử lại lần 2...');
+      // Chỉ gọi lại khi lỗi tạm thời (429/503/timeout), chờ một chút để tránh dính lỗi lần nữa
+      if (retryCount < 1 && isRetryableGeminiError(error)) {
+        logger.warn({ error, retryCount }, 'Gemini quá tải/timeout, chờ rồi thử lại lần 2...');
+        await delay(GEMINI_RETRY_DELAY_MS);
         return this.parse(text, retryCount + 1);
       }
       logger.error({ error, text }, 'Thất bại khi phân tích text chi tiêu');

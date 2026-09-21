@@ -30,6 +30,7 @@ export class QueryInterpreter {
         ],
         config: {
           responseMimeType: 'application/json',
+          thinkingConfig: { thinkingLevel: env.GEMINI_THINKING_LEVEL },
         },
       });
 

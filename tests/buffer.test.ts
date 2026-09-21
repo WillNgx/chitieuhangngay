@@ -55,6 +55,20 @@ describe('MessageBufferManager & Luồng xác nhận (Phase 5)', () => {
     expect(current?.texts).toEqual(['Đổ xăng 100k']);
   });
 
+  it('không chờ xử lý AI của giao dịch cũ xong mới trả về (tránh timeout webhook)', async () => {
+    // onFlush giả lập gọi AI rất lâu, không bao giờ resolve
+    const onFlush = vi.fn(() => new Promise<void>(() => undefined));
+    const chatId = 777;
+    const userId = 'user-777';
+
+    await bufferManager.addText(chatId, userId, 'Cà phê 45k', onFlush);
+    await bufferManager.addText(chatId, userId, 'Đổ xăng 100k', onFlush);
+
+    // addText lần 2 đã trả về dù onFlush chưa xong, buffer mới vẫn được tạo đúng
+    expect(onFlush).toHaveBeenCalledTimes(1);
+    expect(bufferManager.getBuffer(chatId)?.texts).toEqual(['Đổ xăng 100k']);
+  });
+
   it('bàn phím Inline Keyboard có đầy đủ 3 nút [Xác nhận, Sửa, Huỷ]', () => {
     const keyboard = createTransactionPreviewKeyboard('test-tx-id');
     const buttons = keyboard.inline_keyboard[0];

@@ -1,4 +1,5 @@
 import { config as loadDotenv } from 'dotenv';
+import { ThinkingLevel } from '@google/genai';
 import { z } from 'zod';
 
 loadDotenv();
@@ -18,7 +19,14 @@ const configSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
 
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
-  GEMINI_MODEL: z.string().default('gemini-3.6-flash'),
+  GEMINI_MODEL: z.string().default('gemini-3.5-flash-lite'),
+  // Mức "suy nghĩ" của Gemini (minimal | low | medium | high) — càng thấp trả lời càng nhanh
+  GEMINI_THINKING_LEVEL: z
+    .preprocess(
+      (value) => (typeof value === 'string' ? value.toUpperCase() : value),
+      z.nativeEnum(ThinkingLevel),
+    )
+    .default(ThinkingLevel.MINIMAL),
 
   EXCHANGE_RATE_API_URL: z.string().url().default('https://api.frankfurter.app'),
 

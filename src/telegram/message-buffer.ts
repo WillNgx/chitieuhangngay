@@ -38,7 +38,10 @@ export class MessageBufferManager {
         { chatId },
         'Phát hiện tin nhắn text mới trong khi buffer cũ còn tồn tại -> Chốt giao dịch cũ',
       );
-      await this.flush(chatId, onFlush);
+      // Không await: xử lý AI chạy nền để webhook trả về ngay, tránh vượt timeout 10s của grammY
+      // (Telegram sẽ gửi lại update và chặn các tin sau của cùng chat). flush() tự bắt lỗi của onFlush,
+      // và xoá buffer cũ khỏi map một cách đồng bộ trước lần await đầu tiên.
+      void this.flush(chatId, onFlush);
     }
 
     // Lấy lại buffer (nếu vừa flush thì map đã bị xoá)
