@@ -176,13 +176,16 @@ ai_extractions
 ## 7. Category Taxonomy
 
 ```
-Food: Restaurant, Fast Food, Coffee, Groceries, Delivery, 7-Eleven
-Transport: Grab, Taxi, Bus, Train, Fuel, Parking
+Food: Restaurant, Fast Food, Coffee, Groceries, Delivery, 7-Eleven, Big C
+Transport: Grab, Taxi, Bus, Train, Fuel, Parking, Rental
 Shopping: Clothes, Electronics, Games, Household, Other
 Entertainment: Movie, Game, Subscription, Event
 Health: Medicine, Hospital, Fitness
 Bills: Internet, Phone, Electricity, Other
+Travel: Hotel, Sightseeing, Immigration, Laundry
 ```
+
+> Travel, Food/Big C, Transport/Rental được thêm khi nhập dữ liệu chuyến Lào/Thái (08–09/2026). "Ks" = khách sạn → Travel/Hotel.
 
 Lưu trong bảng `categories` (self-referencing `parent_id`), **không hardcode enum** — để user (hoặc AI) có thể mở rộng category sau này.
 

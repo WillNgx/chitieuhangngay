@@ -3,12 +3,13 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 const TAXONOMY: Record<string, string[]> = {
-  Food: ['Restaurant', 'Fast Food', 'Coffee', 'Groceries', 'Delivery', '7-Eleven'],
-  Transport: ['Grab', 'Taxi', 'Bus', 'Train', 'Fuel', 'Parking'],
+  Food: ['Restaurant', 'Fast Food', 'Coffee', 'Groceries', 'Delivery', '7-Eleven', 'Big C'],
+  Transport: ['Grab', 'Taxi', 'Bus', 'Train', 'Fuel', 'Parking', 'Rental'],
   Shopping: ['Clothes', 'Electronics', 'Games', 'Household', 'Other'],
   Entertainment: ['Movie', 'Game', 'Subscription', 'Event'],
   Health: ['Medicine', 'Hospital', 'Fitness'],
   Bills: ['Internet', 'Phone', 'Electricity', 'Other'],
+  Travel: ['Hotel', 'Sightseeing', 'Immigration', 'Laundry'],
 };
 
 export async function seedCategories() {
